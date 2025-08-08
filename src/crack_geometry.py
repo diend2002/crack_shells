@@ -1,22 +1,25 @@
 import torch
-from src.utils import bmv, bdot
 
 class CrackGeometry:
-    """
-    Defines the geometry of a crack in a 2D plane.
-    """
-    def __init__(self, crack_type='center', crack_param=None):
-        """
-        Initializes the crack geometry.
+    """Geometry representation of planar cracks."""
 
-        Args:
-            crack_type (str): The type of crack ('center', 'edge', 'inclined').
-            crack_param (dict): A dictionary of parameters defining the crack.
-                                For 'center' and 'edge': {'length': float}
-                                For 'inclined': {'length': float, 'angle': float}
+    def __init__(self, crack_type: str = 'center', crack_param=None, smoothing: float = 0.0):
+        """Initialize the crack geometry.
+
+        Parameters
+        ----------
+        crack_type: str
+            Type of crack ('center', 'edge', 'inclined').
+        crack_param: dict
+            Parameters describing the crack. For 'center' and 'edge':
+            ``{'length': float}``; for 'inclined': ``{'length': float, 'angle': float}``.
+        smoothing: float, optional
+            Width of the smoothing region for the crack embedding. A value of
+            ``0`` yields a sharp sign function.
         """
         self.crack_type = crack_type
         self.crack_param = crack_param
+        self.smoothing = smoothing
 
     def sdf(self, points):
         """
@@ -98,4 +101,6 @@ class CrackGeometry:
             torch.Tensor: The crack embedding values.
         """
         sdf_values = self.sdf(points)
+        if self.smoothing and self.smoothing > 0.0:
+            return torch.tanh(sdf_values / self.smoothing)
         return torch.sign(sdf_values)
