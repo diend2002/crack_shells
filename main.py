@@ -7,6 +7,7 @@ from src.pinnkan_model import PyKAN_PINN
 from src.geometry import Geometry
 from src.shell_model import LinearNagdhi
 from src.material_model import LinearElastic
+from src.crack_geometry import CrackGeometry
 from params import create_param_dict
 
 from torch.func import jacrev
@@ -119,6 +120,9 @@ if __name__ == '__main__':
     #print_gpu_memory("compute geometric")
     print('Done.')
 
+    crack_geom = CrackGeometry('center', {'length': 0.3}, smoothing=1e-3)
+    penalty_coeff = 1e2
+
     # closure
     def closure():
         def global_to_local(x):
@@ -145,15 +149,18 @@ if __name__ == '__main__':
         pred_5d_1 = first_grad_reshape[:,:,0]
         pred_5d_2 = first_grad_reshape[:,:,1]
 
+        phi = crack_geom.get_crack_embedding(xi_col)
+        weight = 0.5 * (1.0 - phi)
+
         # assemble membrane energy
         membrane_strains = bmv(Bm,pred_5d) + bmv(Bm1,pred_5d_1) + bmv(Bm2,pred_5d_2)
-        membrane_energy = 0.5 * thickness * bdot(membrane_strains,bmv(C,membrane_strains))
+        membrane_energy = weight * 0.5 * thickness * bdot(membrane_strains,bmv(C,membrane_strains))
         # assemble bending energy
         bending_strains = bmv(Bk,pred_5d) + bmv(Bk1,pred_5d_1) + bmv(Bk2,pred_5d_2)
-        bending_energy = 0.5 * (thickness**3/12.) * bdot(bending_strains,bmv(B,bending_strains))
-        # assemble shear energy   
+        bending_energy = weight * 0.5 * (thickness**3/12.) * bdot(bending_strains,bmv(B,bending_strains))
+        # assemble shear energy
         shear_strains = bmv(By,pred_5d) + bmv(By1,pred_5d_1) + bmv(By2,pred_5d_2)
-        shear_energy = 0.5 * shear_factor * thickness * bdot(shear_strains,bmv(D,shear_strains))
+        shear_energy = weight * 0.5 * shear_factor * thickness * bdot(shear_strains,bmv(D,shear_strains))
         
         #print_gpu_memory("measuring forces")
         
@@ -169,7 +176,8 @@ if __name__ == '__main__':
 
         work = torch.mean(W_ext * sqrt_det_a * param_area)
 
-        inner_energy = torch.mean((membrane_energy + bending_energy + shear_energy) * sqrt_det_a * param_area)
+        penalty = penalty_coeff * torch.mean((1 - weight) * pred_5d[:,2]**2)
+        inner_energy = torch.mean((membrane_energy + bending_energy + shear_energy) * sqrt_det_a * param_area) + penalty
 
         loss = inner_energy - work
 
