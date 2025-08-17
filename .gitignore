@@ -5,3 +5,10 @@
 /checkpoints
 /docs
 /eval
+
+/crack_2d/.vscode/
+/crack_2d/history/
+/crack_2d/results/
+/crack_2d/models/
+/loss_history
+/models
